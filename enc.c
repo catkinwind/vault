@@ -5,16 +5,20 @@
 #include <string.h>
 #include "enc.h"
 
-unsigned char key[KEY_SIZE], iv[IV_SIZE];
+// unsigned char key[KEY_SIZE], iv[IV_SIZE];
 
 # ifdef __cplusplus
 extern "C" {
 # endif
 
+#define byte unsigned char
+
 void print_key();
 
-int generate_key(int keyfd)
+int generate_key(char *keyf)
 {
+  int keyfd;
+  byte key[KEY_SIZE], iv[IV_SIZE];
   int fd;
   if((fd = open("/dev/random", O_RDONLY)) == -1) {
     perror("open error");
@@ -32,8 +36,14 @@ int generate_key(int keyfd)
   }
 
 #ifdef DEBUG_KEY
-  print_key();
+  print_key(key, iv);
 #endif
+
+  // control the permission of file to owner.
+  if ((keyfd = open(keyf, O_CREAT | O_WRONLY, S_IRUSR | S_IWUSR)) == -1) {
+    perror("Could not create key file.\n");
+    return -1;
+  }
 
   if(write(keyfd, key, KEY_SIZE) == -1) {
     perror("write key error");
@@ -43,15 +53,15 @@ int generate_key(int keyfd)
     perror("write iv error");
     return -1;
   }
+  close(keyfd);
 
-  close(fd);
   return 0;
 }
 
 /*
  * Print the key and vector, be ware, it's dangerous.
  */
-void print_key()
+void print_key(byte *key, byte *iv)
 {
   int i;
   printf("128 bit key:\n");
@@ -66,12 +76,27 @@ void print_key()
   printf("\n--------\n");
 }
 
-int read_key(int keyfd)
+int read_key(char *keyf, char *key, char *iv)
 {
-  if(read(keyfd, key, KEY_SIZE) == -1)
+  FILE *keyfd;
+  keyfd = fopen(keyf, "r");
+  printf(keyf);
+  if (!keyfd) {
+    printf("%s\n", keyfd );
+    perror("failed to open key file2.\n");
+    return -1;
+  }
+  if(fread(key, 1, KEY_SIZE, keyfd) == -1) {
     perror("read key error");
-  if(read(keyfd, iv, IV_SIZE) == -1)
+    return -1;
+  }
+  if(fread(iv, 1, IV_SIZE, keyfd) == -1) {
     perror("read iv error");
+    return -1;
+  }
+  fclose(keyfd);
+
+  return 1;
 }
 
 /*
@@ -82,13 +107,17 @@ int read_key(int keyfd)
  * -2 - fail to encrypt
  * -3 - fail to final encryption context
  */
-int encrypt(unsigned char *in, FILE *out, int in_len)
+int encrypt(char *in, FILE *out, int in_len, char *keyf)
 {
-  unsigned char *outbuf, *ptr= in;
+  byte *outbuf, *ptr= in;
+  byte key[KEY_SIZE], iv[IV_SIZE];
+
   int outlen, len;
   EVP_CIPHER_CTX ctx;
 
-  outbuf = (unsigned char*)calloc(1024 + EVP_MAX_BLOCK_LENGTH, sizeof(char));
+  read_key(keyf, key, iv);
+
+  outbuf = (char*)calloc(1024 + EVP_MAX_BLOCK_LENGTH, sizeof(char));
   if (!outbuf) {
     perror("Failed to allocate spaces for encryption!\n");
     return -1;
@@ -104,7 +133,7 @@ int encrypt(unsigned char *in, FILE *out, int in_len)
 
   while(in_len > 0) {
     len = in_len > 1024 ? 1024 : in_len;
-    
+
     if (!EVP_CipherUpdate(&ctx, outbuf, &outlen, ptr, len)) {
       /* Error */
       EVP_CIPHER_CTX_cleanup(&ctx);
@@ -124,21 +153,42 @@ int encrypt(unsigned char *in, FILE *out, int in_len)
   return 1;
 }
 
+int fencrypt(char *inf, char *outf, char *keyf)
+{
+  FILE *in, *out, *key;
+  in = fopen(inf, "rb");
+  size_t sz;
+
+  fseek(in, 0L, SEEK_END);
+  sz = ftell(in);
+  fseek(in, 0L, SEEK_SET);
+
+  byte *buf = (byte *)malloc(sz);
+
+  fread(buf, 1, sz, in);
+  out = fopen(outf, "wb");
+
+  return encrypt(buf, out, sz, keyf);
+}
+
 /*
  * decrypt file to a buffer.
  */
-int decrypt(FILE *in, unsigned char **out, size_t *out_len)
+int decrypt(FILE *in, char **out, size_t *out_len, char *keyf)
 {
-  unsigned char *inbuf, *ptr;
+  char *inbuf, *ptr;
   int o_len, len;
   int cur = INIT_BUF_SIZE, prev = cur;
+  byte key[KEY_SIZE], iv[IV_SIZE];
+
+  read_key(keyf, key, iv);
 
   *out = malloc(cur);
   ptr = *out;
 
   EVP_CIPHER_CTX ctx;
 
-  inbuf = (unsigned char*)calloc(1024, sizeof(char));
+  inbuf = (char*)calloc(1024, sizeof(char));
   if (!inbuf) {
     perror("Failed to allocate spaces for decryption!\n");
     return -1;
@@ -163,7 +213,7 @@ int decrypt(FILE *in, unsigned char **out, size_t *out_len)
       *out = realloc(*out, cur);
       ptr = *out + index;
     }
-    
+
     if (!EVP_DecryptUpdate(&ctx, ptr, &o_len, inbuf, len)) {
       /* Error */
       EVP_CIPHER_CTX_cleanup(&ctx);

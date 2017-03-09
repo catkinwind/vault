@@ -7,8 +7,11 @@
 #include "vault.h"
 #include "entry.h"
 #include "strutil.h"
+#include "enc.h"
 
 static bool starts_with(char *str, char *pref);
+
+char *VAULT_FILE_NAME = ".vault";
 
 /*
  * Compare entity by their key. The list is chained by a
@@ -78,22 +81,24 @@ static bool is_title(char *line)
  * @param file_name: file name of data file.
  */
 int vault_load(vault_hashtable *hash, char *keys[],
-               int *tail, char *file_name)
+               int *tail, char *keyf)
 {
   char *line;
   line = (char *)malloc(MAXLINE);
-  size_t blen = MAXLINE;
+  size_t blen = MAXLINE, len;
   ssize_t cnt;
   char *key = NULL, *value = NULL;
-  FILE *f = fopen(file_name, "r");
-  if (!f) {
-    printf("Error to open file\n");
-    exit(1);
-  }
+  char *buf;
+
+  FILE *vault;
+  vault = fopen(VAULT_FILE_NAME, "r");
+
+  decrypt(vault, &buf, &len, keyf);
+
   struct vault_entry *e;
-  while(!feof(f)){
-    if ((cnt = getline(&line, &blen, f)) == 0)
-      continue;
+  char *del = "\r\n", *saveptr;
+  line = strtok_r(buf, del, &saveptr);
+  while(line){
     trim(line);
     if (strcmp(line, "") == 0) continue;
 
@@ -118,6 +123,7 @@ int vault_load(vault_hashtable *hash, char *keys[],
       /* copy string to another space */
       value = append_values(value, line);
     }
+    line = strtok_r(NULL, del, &saveptr);
   }
   if (key) {
     create_vault_entry(key, value, &e);
@@ -126,7 +132,7 @@ int vault_load(vault_hashtable *hash, char *keys[],
     vault_hash_add(hash, vault_compare, vault_choose, e,
                    &e->hash_entry);
   }
-  free(line);
+  free(buf);
 }
 
 /*
@@ -148,6 +154,7 @@ static void show_entries(char **keys, int tail)
 static void show_entry(vault_hashtable *hash, char **keys, int tail, int i) {
   if (i >= tail) {
     printf("Index out of range!\n");
+    return;
   }
   char *key = keys[i];
   struct vault_entry *node = vault_hash_find(hash, key);
@@ -198,9 +205,9 @@ static char* readstdin(char *buff, size_t *n)
 }
 
 /*
- *
+ * Check nptr is octal number
  */
-static bool is_digital(const char *nptr)
+static bool is_octal(const char *nptr)
 {
   while(*nptr != '\0') {
     if (*nptr < '0' || *nptr > '9') {
@@ -217,7 +224,19 @@ static int is_exit(char *cmd)
          strcmp(cmd, "e") == 0;
 }
 
-int main(int argc, char *argv[])
+/*
+ * Init vault. vault file will be created
+ */
+static int init(char *inf, char *keyf)
+{
+  generate_key(keyf);
+  fencrypt(inf, VAULT_FILE_NAME, keyf);
+  printf("Please securely keep the key file.\n"
+    "We could not recover it.");
+  return 1;
+}
+
+static int enter_cli(char *keyf)
 {
   char *keys[MAXITEMS];
   int tail = 0;
@@ -230,12 +249,15 @@ int main(int argc, char *argv[])
   struct vault_entry *e;
 
   prompt();
+  // load vault
+  vault_load(hash, keys, &tail, keyf);
+  state = LOADED;
+  show_entries(keys, tail);
+
   cmd = readstdin(buff, &blen);
   while (!is_exit(cmd)) {
     if (starts_with(cmd, "load")) {
-      vault_load(hash, keys, &tail, cmd);
-      state = LOADED;
-      show_entries(keys, tail);
+
     } else if (starts_with(cmd, "r")) {
       e = vault_hash_find(hash, cmd);
       if (e) {
@@ -243,7 +265,7 @@ int main(int argc, char *argv[])
       }
     } else if (starts_with(cmd, "dk")) {
       if (*cmd == '\0') show_entries(keys, tail);
-      else if (is_digital(cmd)) {
+      else if (is_octal(cmd)) {
         int index = atoi(cmd);
         show_entry(hash, keys, tail, index);
       } else {
@@ -260,4 +282,45 @@ int main(int argc, char *argv[])
 
   vault_hash_delete(hash, free_vault_entry, NULL);
   hash = NULL;
+}
+
+static void export(char *outf, char *keyf)
+{
+
+}
+
+static void usage()
+{
+  printf("vault to keep some secrete items.\n"
+   "  init\t-\tinit a vault.\n");
+}
+
+int main(int argc, char *argv[])
+{
+  if (argc == 1) {
+    usage();
+    return -1;
+  }
+
+  if (argc == 2) {
+    enter_cli(argv[1]);
+    return 0;
+  }
+
+  if (strcmp(argv[1], "init") == 0) {
+    if (argc != 4) return 1;
+
+    init(argv[2], argv[3]);
+    return 0;
+  }
+
+  if (strcmp(argv[2], "export") == 0) {
+    if (argc != 4) return 1;
+    export(argv[2], argv[3]);
+
+    return 0;
+  }
+
+  usage();
+  return 1;
 }

@@ -1,6 +1,7 @@
 CC = gcc
 
 SOURCES = \
+  enc \
 	entry \
 	hash \
 	vault
@@ -8,6 +9,8 @@ SOURCES = \
 TESTS = \
 	enc \
 	enc_test
+
+LIBS = -lcrypto
 
 debug   : CFLAGS = -gdwarf-2
 debug   : vault test
@@ -24,10 +27,10 @@ default: vault
 all: vault test
 
 vault: $(OUTDIR) $(OBJ_OUTDIR) $(OBJS)
-	$(CC) -o $(OUTDIR)/vault $(OBJS)
+	$(CC) -o $(OUTDIR)/vault $(OBJS) $(LIBS)
 
 test: $(OUTDIR) $(OBJ_OUTDIR) $(TESTS)
-	$(CC) -o $(OUTDIR)/test $(TESTS) -lcrypto
+	$(CC) -o $(OUTDIR)/test $(TESTS) $(LIBS)
 
 $(OUTDIR):
 	mkdir -p $@

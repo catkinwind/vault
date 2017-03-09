@@ -1,5 +1,6 @@
 #ifndef _VAULT_ENC_H
 # define __VAULT_ENC_H 1
+#include <stdio.h>
 #include <openssl/evp.h>
 
 #define IP_SIZE 1024
@@ -10,8 +11,10 @@
 
 #endif
 
-int generate_key(int keyfd);
+int generate_key(char *keyf);
 
-int encrypt(unsigned char *in, FILE *out, int in_len);
+int encrypt(char *in, FILE *out, int in_len, char *keyf);
 
-int decrypt(FILE *in, unsigned char **out, size_t *out_len);
+int decrypt(FILE *in, char **out, size_t *out_len, char *keyf);
+
+int fencrypt(char *in, char *out, char *keyf);
