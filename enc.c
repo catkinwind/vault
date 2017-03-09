@@ -80,18 +80,16 @@ int read_key(char *keyf, char *key, char *iv)
 {
   FILE *keyfd;
   keyfd = fopen(keyf, "r");
-  printf(keyf);
   if (!keyfd) {
-    printf("%s\n", keyfd );
     perror("failed to open key file2.\n");
     return -1;
   }
   if(fread(key, 1, KEY_SIZE, keyfd) == -1) {
-    perror("read key error");
+    perror("read key error\n");
     return -1;
   }
   if(fread(iv, 1, IV_SIZE, keyfd) == -1) {
-    perror("read iv error");
+    perror("read iv error\n");
     return -1;
   }
   fclose(keyfd);
@@ -180,6 +178,7 @@ int decrypt(FILE *in, char **out, size_t *out_len, char *keyf)
   int o_len, len;
   int cur = INIT_BUF_SIZE, prev = cur;
   byte key[KEY_SIZE], iv[IV_SIZE];
+  *out_len = 0;
 
   read_key(keyf, key, iv);
 
@@ -230,6 +229,21 @@ int decrypt(FILE *in, char **out, size_t *out_len, char *keyf)
   *out_len += o_len;
   EVP_CIPHER_CTX_cleanup(&ctx);
   return 1;
+}
+
+int fdecrypt(char *in, char *out, char *keyf)
+{
+  char *buf;
+  size_t len;
+  FILE *infd, *outfd;
+  infd = fopen(in, "rb");
+  outfd = fopen(out, "wb");
+
+  decrypt(infd, &buf, &len, keyf);
+  fwrite(buf, 1, len, outfd);
+
+  fclose(infd);
+  fclose(outfd);
 }
 
 # ifdef __cplusplus

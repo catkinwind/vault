@@ -84,7 +84,6 @@ int vault_load(vault_hashtable *hash, char *keys[],
                int *tail, char *keyf)
 {
   char *line;
-  line = (char *)malloc(MAXLINE);
   size_t blen = MAXLINE, len;
   ssize_t cnt;
   char *key = NULL, *value = NULL;
@@ -158,7 +157,7 @@ static void show_entry(vault_hashtable *hash, char **keys, int tail, int i) {
   }
   char *key = keys[i];
   struct vault_entry *node = vault_hash_find(hash, key);
-  printf("%s\n\n", node->value);
+  printf("\n%s\n----\n%s\n\n", node->key, node->value);
 }
 
 static void prompt()
@@ -247,18 +246,15 @@ static int enter_cli(char *keyf)
 
   vault_hashtable *hash = vault_hash_new(HASH_LEN);
   struct vault_entry *e;
-
-  prompt();
   // load vault
   vault_load(hash, keys, &tail, keyf);
   state = LOADED;
   show_entries(keys, tail);
+  prompt();
 
   cmd = readstdin(buff, &blen);
   while (!is_exit(cmd)) {
-    if (starts_with(cmd, "load")) {
-
-    } else if (starts_with(cmd, "r")) {
+    if (starts_with(cmd, "r")) {
       e = vault_hash_find(hash, cmd);
       if (e) {
         printf("%s:\n---\n%s\n", e->key, e->value);
@@ -286,7 +282,23 @@ static int enter_cli(char *keyf)
 
 static void export(char *outf, char *keyf)
 {
+  printf("Are you sure to export? [Y/n]");
+  char ans;
 
+  ans = getchar();
+  while (1) {
+    if (ans == 'Y' || ans == 'y') {
+      fdecrypt(VAULT_FILE_NAME, outf, keyf);
+      return;
+    } else if(ans == 'N' || ans == 'n') {
+      return;
+    } else {
+      printf("Please answer Y/n.\n"
+        "Are you sure to export? [Y/n]"
+      );
+      ans = getchar();
+    }
+  }
 }
 
 static void usage()
@@ -309,12 +321,12 @@ int main(int argc, char *argv[])
 
   if (strcmp(argv[1], "init") == 0) {
     if (argc != 4) return 1;
-
     init(argv[2], argv[3]);
+
     return 0;
   }
 
-  if (strcmp(argv[2], "export") == 0) {
+  if (strcmp(argv[1], "export") == 0) {
     if (argc != 4) return 1;
     export(argv[2], argv[3]);
 

@@ -9,8 +9,6 @@
 #define IV_SIZE 16
 #define INIT_BUF_SIZE 1024
 
-#endif
-
 int generate_key(char *keyf);
 
 int encrypt(char *in, FILE *out, int in_len, char *keyf);
@@ -18,3 +16,7 @@ int encrypt(char *in, FILE *out, int in_len, char *keyf);
 int decrypt(FILE *in, char **out, size_t *out_len, char *keyf);
 
 int fencrypt(char *in, char *out, char *keyf);
+
+int fdecrypt(char *in, char *out, char *keyf);
+
+#endif

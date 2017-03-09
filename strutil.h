@@ -27,7 +27,7 @@ static inline char * trim(char *str)
  * Values could be multiple lines, so we will append values
  * continuously.
  */
-static char * append_values(char *value, const char * line)
+static char * append_values(char *value, const char *line)
 {
   char *tmp;
   size_t len = strlen(line) + 1;
@@ -39,6 +39,7 @@ static char * append_values(char *value, const char * line)
     return tmp;
   }
   tmp = (char *)malloc(len);
+  tmp[0] = 0;
   strcat(tmp, line);
   return tmp;
 }
