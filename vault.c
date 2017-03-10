@@ -4,6 +4,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
+#include <regex.h>
 #include "vault.h"
 #include "entry.h"
 #include "strutil.h"
@@ -118,7 +119,8 @@ int vault_load(vault_hashtable *hash, char *keys[],
       }
       key = (char *)malloc(strlen(line) + 1);
       strcpy(key, line);
-    } else {
+    }
+    else {
       /* copy string to another space */
       value = append_values(value, line);
     }
@@ -144,7 +146,12 @@ static void show_entries(char **keys, int tail)
     printf("%d: %s\n", i, keys[i]);
     i++;
   }
-  printf("Use 'dk n' to show the vaule of it\n");
+  printf("------\n"
+         "'k n' to show the vaule of a key, n could be index of key or prefix.\n"
+         "'r reg' to match with regular expression.\n"
+         "'exit' or 'e' to exit\n"
+         "------\n"
+        );
 }
 
 /*
@@ -235,6 +242,58 @@ static int init(char *inf, char *keyf)
   return 1;
 }
 
+static struct vault_entry *find_by_pref(vault_hashtable *hash, char **keys, int tail, char *pref)
+{
+  int i, len;
+  if (!pref || (len = strlen(pref)) == 0) return NULL;
+  for (i = 0; i < tail; ++i) {
+    if (strncmp(keys[i], pref, len) == 0) {
+      return vault_hash_find(hash, keys[i]);
+    }
+  }
+  return NULL;
+}
+
+static void *show_prefixed(vault_hashtable *hash, char **keys, int tail, char *pref)
+{
+  struct vault_entry *node;
+  node = find_by_pref(hash, keys, tail, pref);
+  if (!node) {
+    printf("Not found.\n");
+  }
+  else {
+    printf("\n%s\n----\n%s\n\n", node->key, node->value);
+  }
+}
+
+/*
+ * Search by regular expression
+ */
+static void regsearch(vault_hashtable *hash, char **keys, int tail, char *regstr)
+{
+  struct vault_entry *node = NULL;
+  regex_t regex;
+  int ret, i;
+  char *buf[100];
+
+  ret = regcomp(&regex, regstr, 0);
+  if (ret) {
+    printf("Invalide regular expression.\n");
+    return;
+  }
+
+  for (i = 0; i < tail; ++i) {
+    ret = regexec(&regex, keys[i], 0, NULL, 0);
+    if (!ret) {
+    node = vault_hash_find(hash, keys[i]);
+    if (node) {
+      printf("\n%s\n----\n%s\n\n", node->key, node->value);
+    }
+    return;
+    }
+  }
+}
+
 static int enter_cli(char *keyf)
 {
   char *keys[MAXITEMS];
@@ -259,17 +318,27 @@ static int enter_cli(char *keyf)
       if (e) {
         printf("%s:\n---\n%s\n", e->key, e->value);
       }
-    } else if (starts_with(cmd, "dk")) {
+    } 
+    else if (starts_with(cmd, "l")) {
+      show_entries(keys, tail);
+    }
+    else if (starts_with(cmd, "m")) {
+      regsearch(hash, keys, tail, cmd);
+    }
+    else if (starts_with(cmd, "k")) {
       if (*cmd == '\0') show_entries(keys, tail);
       else if (is_octal(cmd)) {
         int index = atoi(cmd);
         show_entry(hash, keys, tail, index);
-      } else {
-        // TODO
       }
-    } else if (!strlen(cmd)){
+      else { // search with prefix
+        show_prefixed(hash, keys, tail, cmd);
+      }
+    }
+    else if (!strlen(cmd)){
       printf("\n");
-    } else {
+    }
+    else {
       printf("Unrecognized command.\n");
     }
     prompt();
@@ -290,9 +359,11 @@ static void export(char *outf, char *keyf)
     if (ans == 'Y' || ans == 'y') {
       fdecrypt(VAULT_FILE_NAME, outf, keyf);
       return;
-    } else if(ans == 'N' || ans == 'n') {
+    }
+    else if(ans == 'N' || ans == 'n') {
       return;
-    } else {
+    }
+    else {
       printf("Please answer Y/n.\n"
         "Are you sure to export? [Y/n]"
       );
