@@ -4,3 +4,5 @@ obj/
 reminder.*
 *.swp
 .vault
+cscope.out
+tags
