@@ -111,7 +111,7 @@ int encrypt(char *in, FILE *out, int in_len, char *keyf)
   byte key[KEY_SIZE], iv[IV_SIZE];
 
   int outlen, len;
-  EVP_CIPHER_CTX ctx;
+  EVP_CIPHER_CTX *ctx;
 
   read_key(keyf, key, iv);
 
@@ -122,32 +122,32 @@ int encrypt(char *in, FILE *out, int in_len, char *keyf)
   }
 
   /* Don't set key or IV right away; we want to check lengths */
-  EVP_CIPHER_CTX_init(&ctx);
-  EVP_CipherInit_ex(&ctx, EVP_aes_256_cbc(), NULL, NULL, NULL, 1);
-  OPENSSL_assert(EVP_CIPHER_CTX_key_length(&ctx) == 32);
-  OPENSSL_assert(EVP_CIPHER_CTX_iv_length(&ctx) == 16);
+  ctx = EVP_CIPHER_CTX_new();
+  EVP_CipherInit_ex(ctx, EVP_aes_256_cbc(), NULL, NULL, NULL, 1);
+  OPENSSL_assert(EVP_CIPHER_CTX_key_length(ctx) == 32);
+  OPENSSL_assert(EVP_CIPHER_CTX_iv_length(ctx) == 16);
 
-  EVP_CipherInit_ex(&ctx, NULL, NULL, key, iv, 1);
+  EVP_CipherInit_ex(ctx, NULL, NULL, key, iv, 1);
 
   while(in_len > 0) {
     len = in_len > 1024 ? 1024 : in_len;
 
-    if (!EVP_CipherUpdate(&ctx, outbuf, &outlen, ptr, len)) {
+    if (!EVP_CipherUpdate(ctx, outbuf, &outlen, ptr, len)) {
       /* Error */
-      EVP_CIPHER_CTX_cleanup(&ctx);
+      EVP_CIPHER_CTX_free(ctx);
       return -2;
     }
     fwrite(outbuf, 1, outlen, out);
     ptr += 1024;
     in_len -= 1024;
   }
-  if (!EVP_CipherFinal_ex(&ctx, outbuf, &outlen)) {
+  if (!EVP_CipherFinal_ex(ctx, outbuf, &outlen)) {
     /* Error */
-    EVP_CIPHER_CTX_cleanup(&ctx);
+    EVP_CIPHER_CTX_free(ctx);
     return -3;
   }
   fwrite(outbuf, 1, outlen, out);
-  EVP_CIPHER_CTX_cleanup(&ctx);
+  EVP_CIPHER_CTX_free(ctx);
   return 1;
 }
 
@@ -185,7 +185,7 @@ int decrypt(FILE *in, char **out, size_t *out_len, char *keyf)
   *out = malloc(cur);
   ptr = *out;
 
-  EVP_CIPHER_CTX ctx;
+  EVP_CIPHER_CTX *ctx;
 
   inbuf = (char*)calloc(1024, sizeof(char));
   if (!inbuf) {
@@ -194,12 +194,12 @@ int decrypt(FILE *in, char **out, size_t *out_len, char *keyf)
   }
 
   /* Don't set key or IV right away; we want to check lengths */
-  EVP_CIPHER_CTX_init(&ctx);
-  EVP_DecryptInit_ex(&ctx, EVP_aes_256_cbc(), NULL, NULL, NULL);
-  OPENSSL_assert(EVP_CIPHER_CTX_key_length(&ctx) == 32);
-  OPENSSL_assert(EVP_CIPHER_CTX_iv_length(&ctx) == 16);
+  ctx = EVP_CIPHER_CTX_new();
+  EVP_DecryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, NULL, NULL);
+  OPENSSL_assert(EVP_CIPHER_CTX_key_length(ctx) == 32);
+  OPENSSL_assert(EVP_CIPHER_CTX_iv_length(ctx) == 16);
 
-  EVP_DecryptInit_ex(&ctx, NULL, NULL, key, iv);
+  EVP_DecryptInit_ex(ctx, NULL, NULL, key, iv);
 
   while(1) {
     len = fread(inbuf, 1, IP_SIZE, in);
@@ -213,21 +213,21 @@ int decrypt(FILE *in, char **out, size_t *out_len, char *keyf)
       ptr = *out + index;
     }
 
-    if (!EVP_DecryptUpdate(&ctx, ptr, &o_len, inbuf, len)) {
+    if (!EVP_DecryptUpdate(ctx, ptr, &o_len, inbuf, len)) {
       /* Error */
-      EVP_CIPHER_CTX_cleanup(&ctx);
+      EVP_CIPHER_CTX_free(ctx);
       return -2;
     }
     ptr += o_len;
     *out_len += o_len;
   }
-  if (!EVP_DecryptFinal_ex(&ctx, ptr, &o_len)) {
+  if (!EVP_DecryptFinal_ex(ctx, ptr, &o_len)) {
     /* Error */
-    EVP_CIPHER_CTX_cleanup(&ctx);
+    EVP_CIPHER_CTX_free(ctx);
     return -3;
   }
   *out_len += o_len;
-  EVP_CIPHER_CTX_cleanup(&ctx);
+  EVP_CIPHER_CTX_free(ctx);
   return 1;
 }
 

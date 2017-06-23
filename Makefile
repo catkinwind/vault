@@ -4,6 +4,7 @@ SOURCES = \
   enc \
 	entry \
 	hash \
+	editor \
 	vault
 
 TESTS = \

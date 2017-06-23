@@ -1,14 +1,20 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
 #include <regex.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include "vault.h"
 #include "entry.h"
 #include "strutil.h"
 #include "enc.h"
+#include "editor.h"
+
+#define PATH_MAX_SIZE 512
 
 static bool starts_with(char *str, char *pref);
 
@@ -92,7 +98,9 @@ int vault_load(vault_hashtable *hash, char *keys[],
 
   FILE *vault;
   vault = fopen(VAULT_FILE_NAME, "r");
-
+  /*
+   * TODO: verify the limitation of content
+   */
   decrypt(vault, &buf, &len, keyf);
 
   struct vault_entry *e;
@@ -148,23 +156,77 @@ static void show_entries(char **keys, int tail)
   }
   printf("------\n"
          "'k n' to show the vaule of a key, n could be index of key or prefix.\n"
-         "'r reg' to match with regular expression.\n"
+         "'r title' to show item with the 'title'\n"
+         "'m regexp' to match with regular expression.\n"
          "'exit' or 'e' to exit\n"
          "------\n"
         );
 }
 
+static void show_entry(struct vault_entry *node)
+{
+#ifdef __gnu_linux__
+  int fd;
+  char filename[PATH_MAX_SIZE];
+  char *buf;
+  buf = getcwd(filename, PATH_MAX_SIZE - 4); /* reserve space for file */
+  if (buf == NULL && errno == ERANGE) {
+    printf("Path length exceeds %d\n", PATH_MAX_SIZE - 4);
+    return;
+  }
+  if (filename[0] == '(') {
+    printf("Current directory is not reachable\n");
+    return;
+  }
+
+  int len = strlen(filename);
+  if (filename[len-1] != '/') {
+    filename[len++] = '/';
+  }
+  filename[len++] = '.';
+  filename[len++] = 'v';
+  filename[len] = 0;
+
+  fd  = open(filename, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
+  if (!fd) {
+    printf("Failed to create temp file.\n:");
+    return;
+  }
+
+  buf = (char *)malloc(MAXLINE);
+  
+  sprintf(buf, "%s\n----\n%s\n", node->key, node->value);
+  write(fd, buf, strlen(buf));
+  close(fd);
+
+  launch_editor(filename);
+  /* 
+   * Ensure to remove the temp file
+   */
+  int status = remove(filename);
+  if (status)
+    printf("Please check file: \n%s\nmake sure it's removed", filename);
+
+  free(buf);
+#else
+  // FIXME:
+
+  printf("\n%s\n----\n%s\n\n", node->key, node->value);
+#endif
+
+}
+ 
 /*
  * Show vaule by index;
  */
-static void show_entry(vault_hashtable *hash, char **keys, int tail, int i) {
+static void by_index(vault_hashtable *hash, char **keys, int tail, int i) {
   if (i >= tail) {
     printf("Index out of range!\n");
     return;
   }
   char *key = keys[i];
   struct vault_entry *node = vault_hash_find(hash, key);
-  printf("\n%s\n----\n%s\n\n", node->key, node->value);
+  show_entry(node);
 }
 
 static void prompt()
@@ -262,9 +324,11 @@ static void *show_prefixed(vault_hashtable *hash, char **keys, int tail, char *p
     printf("Not found.\n");
   }
   else {
-    printf("\n%s\n----\n%s\n\n", node->key, node->value);
+    show_entry(node);
   }
 }
+
+
 
 /*
  * Search by regular expression
@@ -287,7 +351,7 @@ static void regsearch(vault_hashtable *hash, char **keys, int tail, char *regstr
     if (!ret) {
     node = vault_hash_find(hash, keys[i]);
     if (node) {
-      printf("\n%s\n----\n%s\n\n", node->key, node->value);
+      show_entry(node);
     }
     return;
     }
@@ -316,7 +380,7 @@ static int enter_cli(char *keyf)
     if (starts_with(cmd, "r")) {
       e = vault_hash_find(hash, cmd);
       if (e) {
-        printf("%s:\n---\n%s\n", e->key, e->value);
+        show_entry(e);
       }
     } 
     else if (starts_with(cmd, "l")) {
@@ -329,7 +393,7 @@ static int enter_cli(char *keyf)
       if (*cmd == '\0') show_entries(keys, tail);
       else if (is_octal(cmd)) {
         int index = atoi(cmd);
-        show_entry(hash, keys, tail, index);
+        by_index(hash, keys, tail, index);
       }
       else { // search with prefix
         show_prefixed(hash, keys, tail, cmd);

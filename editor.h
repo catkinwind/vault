@@ -24,6 +24,6 @@ struct child_process
   int error: 1;
 };
 
-int launch_editor(char const* path, char const* msg);
+int launch_editor(char const* path);
 
 #endif /* _VAULT_EDITOR */

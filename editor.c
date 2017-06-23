@@ -118,15 +118,11 @@ int run_command(struct child_process* cmd)
   return 1;
 }
 
-int launch_editor(char const* path, char const* msg) {
+int launch_editor(char const* path)
+{
   struct child_process cmd = CHILD_PROCESS_INIT;
   const char *argv[] = {"/usr/bin/vim", "vim", "-R", path, NULL};
   cmd.argv = argv;
   run_command(&cmd);
 }
 
-// TODO: remove this to test dir.
-int main(char **argv, int argc)
-{
-  launch_editor("/home/zzy/a.txt", "hello");
-}
