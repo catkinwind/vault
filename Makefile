@@ -18,8 +18,10 @@ debug   : vault test
 
 .PHONY: all debug clean OUTDIR
 
+SRC_DIR = src
 OUTDIR = bin
 OBJ_OUTDIR = obj
+
 OBJS := $(addprefix $(OBJ_OUTDIR)/, $(addsuffix .o, $(SOURCES)))
 TESTS := $(addprefix $(OBJ_OUTDIR)/, $(addsuffix .o, $(TESTS)))
 
@@ -39,7 +41,7 @@ $(OUTDIR):
 $(OBJ_OUTDIR):
 	mkdir -p $@
 
-$(OBJ_OUTDIR)/%.o: %.c
+$(OBJ_OUTDIR)/%.o: $(SRC_DIR)/%.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean :
