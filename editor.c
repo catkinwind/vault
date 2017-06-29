@@ -1,4 +1,5 @@
 #include "editor.h"
+#include <fcntl.h>
 
 // FIXME: to confirm the ERRNOs.
 enum child_errcode
@@ -85,10 +86,17 @@ int run_command(struct child_process* cmd)
   if (pipe(notify_pipe))
     notify_pipe[0] = notify_pipe[1] = -1;
 
+  sigset_t all, old;
+  sigfillset(&all);
+
+  sigprocmask(SIG_BLOCK, &all, &old);
   cmd->pid = fork();
   failed_errno = errno;
   if (cmd->pid == 0) {
     char **childenv;
+    int fd = open(cmd->argv[3], O_RDONLY);
+    lockf(fd, F_LOCK, 0);
+
     execve(cmd->argv[0], (char *const *)cmd->argv+1,
         environ);
 
@@ -96,9 +104,12 @@ int run_command(struct child_process* cmd)
       child_die(notify_pipe[1], CHILD_ERR_ENOENT);
     else 
       child_die(notify_pipe[1], CHILD_ERR_ERRNO);
+    lockf(fd, F_UNLCK, 0);
 
     exit(EXIT_SUCCESS);
   }
+
+  sigprocmask(SIG_BLOCK, &old, NULL);
   close(notify_pipe[1]);
   struct child_err cerr;
   if (xread(notify_pipe[0], &cerr, sizeof(cerr)) == sizeof(cerr)) {

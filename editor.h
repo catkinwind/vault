@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <poll.h>
 #include <errno.h>
+#include <signal.h>
 
 static const char *empty_argv[] = { NULL };
 
