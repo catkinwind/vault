@@ -1,5 +1,9 @@
 #include <stdlib.h>
+#ifdef __APPLE__
+#include <sys/malloc.h>
+#elif __LINUX__
 #include <malloc.h>
+#endif
 
 #include "hash.h"
 
